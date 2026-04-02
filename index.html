@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<!--
+  Деплой (GitHub Pages): Settings → Pages → Source: Deploy from branch, folder /docs (main).
+  Итоговый URL должен совпасть с app.json extra.passwordResetRedirectUrl и с Supabase:
+  Dashboard → Authentication → URL Configuration → Redirect URLs:
+    - полный HTTPS этой страницы (например https://tvoii-druzya.github.io/Riadom/reset-password.html)
+    - myapp://auth/reset-password
+-->
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Новый пароль · ТвоИИ друзья</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #fff9f7;
+      --text: #4a4a4a;
+      --muted: #666666;
+      --accent: #d48f94;
+      --border: #e0e0e0;
+      --placeholder: #aaaaaa;
+      --white: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "PT Serif", Georgia, serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+      line-height: 1.45;
+    }
+    .wrap { max-width: 420px; margin: 0 auto; padding-top: 16px; }
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin: 0 0 12px;
+    }
+    .desc {
+      color: var(--muted);
+      font-size: 16px;
+      margin-bottom: 28px;
+      line-height: 22px;
+    }
+    .field {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--white);
+      margin-bottom: 18px;
+      padding: 0 16px;
+    }
+    .field svg { flex-shrink: 0; margin-right: 10px; opacity: 0.55; }
+    input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font: 16px/1.3 "PT Serif", Georgia, serif;
+      color: var(--text);
+      padding: 14px 0;
+      outline: none;
+    }
+    input::placeholder { color: var(--placeholder); }
+    button.main {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: var(--white);
+      font: 700 16px "PT Serif", Georgia, serif;
+      padding: 16px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button.main:disabled { opacity: 0.6; cursor: not-allowed; }
+    .err, .ok {
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
+      font-size: 15px;
+    }
+    .err { background: #fdeaea; color: #8e2424; }
+    .ok { background: #e8f5e9; color: #2e6b2e; }
+    .hidden { display: none !important; }
+    .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+    .secondary {
+      margin-top: 20px;
+      font-size: 15px;
+      color: var(--muted);
+    }
+    button.link {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font: 400 15px "PT Serif", Georgia, serif;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="view-loading" class="loading">Загрузка…</div>
+
+    <div id="view-redirect" class="hidden">
+      <h1>Открываем приложение</h1>
+      <p class="desc">Если «ТвоИИ друзья» не открылось, нажмите кнопку ниже и введите новый пароль здесь, в браузере.</p>
+      <button type="button" class="main" id="btn-open-app">Открыть в приложении ещё раз</button>
+      <button type="button" class="link" id="btn-stay-browser">Продолжить в браузере</button>
+    </div>
+
+    <div id="view-form" class="hidden">
+      <h1>Новый пароль</h1>
+      <p class="desc">Придумайте новый пароль для входа в аккаунт.</p>
+      <div id="msg"></div>
+      <form id="f">
+        <div class="field">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          <input type="password" id="p1" placeholder="Новый пароль" autocomplete="new-password" required minlength="6" />
+        </div>
+        <div class="field">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          <input type="password" id="p2" placeholder="Подтвердите пароль" autocomplete="new-password" required minlength="6" />
+        </div>
+        <button type="submit" class="main" id="submit">Сохранить пароль</button>
+      </form>
+      <p class="secondary">После сохранения войдите в приложении с новым паролем.</p>
+    </div>
+
+    <div id="view-bad" class="hidden">
+      <h1>Ссылка недействительна</h1>
+      <p class="desc">Запросите новую ссылку для сброса пароля в приложении, раздел «Забыли пароль».</p>
+    </div>
+  </div>
+
+  <script type="module">
+    const SUPABASE_URL = "https://hrdqnggozfgxmgpihzsb.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_2HFQcx6n516TfJ1LGNnwCg_U3TFn3w-";
+    const APP_DEEP_LINK_BASE = "myapp://auth/reset-password";
+
+    const $ = (id) => document.getElementById(id);
+    const show = (id) => { ["view-loading","view-redirect","view-form","view-bad"].forEach(v => $(v).classList.add("hidden")); $(id).classList.remove("hidden"); };
+
+    function parseHashParams() {
+      const h = window.location.hash;
+      if (!h || h.length < 2) return null;
+      return new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
+    }
+
+    function isMobileUa() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || "");
+    }
+
+    function tokensFromParams(sp) {
+      if (!sp) return null;
+      const access_token = sp.get("access_token");
+      const refresh_token = sp.get("refresh_token");
+      if (access_token && refresh_token) return { access_token, refresh_token };
+      return null;
+    }
+
+    function buildAppUrl(tokens) {
+      const q = new URLSearchParams({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+      return `${APP_DEEP_LINK_BASE}?${q.toString()}`;
+    }
+
+    let pendingTokens = null;
+    let supabase = null;
+
+    function tryMobileRedirect(tokens) {
+      if (!isMobileUa()) return false;
+      pendingTokens = tokens;
+      show("view-redirect");
+      window.location.replace(buildAppUrl(tokens));
+      return true;
+    }
+
+    $("btn-open-app")?.addEventListener("click", () => {
+      if (pendingTokens) window.location.href = buildAppUrl(pendingTokens);
+    });
+
+    $("btn-stay-browser")?.addEventListener("click", async () => {
+      show("view-loading");
+      await startBrowserFlow(pendingTokens);
+    });
+
+    async function startBrowserFlow(tokens) {
+      const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          detectSessionInUrl: !tokens,
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      });
+
+      if (tokens) {
+        const { error } = await supabase.auth.setSession({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+        });
+        if (error) {
+          show("view-bad");
+          return;
+        }
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          show("view-bad");
+          return;
+        }
+      }
+
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      show("view-form");
+    }
+
+    const hashParams = parseHashParams();
+    const fromHash = tokensFromParams(hashParams);
+
+    try {
+      if (fromHash && tryMobileRedirect(fromHash)) {
+        /* redirecting */
+      } else if (fromHash) {
+        await startBrowserFlow(fromHash);
+      } else {
+        await startBrowserFlow(null);
+      }
+    } catch {
+      show("view-bad");
+    }
+
+    $("f")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const p1 = $("p1").value.trim();
+      const p2 = $("p2").value.trim();
+      const msg = $("msg");
+      msg.innerHTML = "";
+      if (p1.length < 6) {
+        msg.innerHTML = '<div class="err">Пароль должен содержать минимум 6 символов.</div>';
+        return;
+      }
+      if (p1 !== p2) {
+        msg.innerHTML = '<div class="err">Пароли не совпадают.</div>';
+        return;
+      }
+      const btn = $("submit");
+      btn.disabled = true;
+      const { error } = await supabase.auth.updateUser({ password: p1 });
+      btn.disabled = false;
+      if (error) {
+        msg.innerHTML = `<div class="err">${error.message || "Не удалось сохранить пароль."}</div>`;
+        return;
+      }
+      msg.innerHTML = '<div class="ok">Пароль изменён. Теперь можно войти в приложении с новым паролем.</div>';
+      $("f").classList.add("hidden");
+    });
+  </script>
+</body>
+</html>
