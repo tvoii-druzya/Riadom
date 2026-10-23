@@ -5,11 +5,14 @@
   Dashboard → Authentication → URL Configuration → Redirect URLs:
     - полный HTTPS этой страницы (например https://tvoii-druzya.github.io/Riadom/reset-password.html)
     - myapp://auth/reset-password
+  Важно: пароль задаётся прямо на этой странице. В приложение автоматически НЕ перекидываем —
+  это и было причиной тупика (ссылка открывала приложение, где сброс не завершался).
 -->
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
   <title>Новый пароль · ТвоИИ друзья</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -35,17 +38,8 @@
       line-height: 1.45;
     }
     .wrap { max-width: 420px; margin: 0 auto; padding-top: 16px; }
-    h1 {
-      font-size: 28px;
-      font-weight: 700;
-      margin: 0 0 12px;
-    }
-    .desc {
-      color: var(--muted);
-      font-size: 16px;
-      margin-bottom: 28px;
-      line-height: 22px;
-    }
+    h1 { font-size: 28px; font-weight: 700; margin: 0 0 12px; }
+    .desc { color: var(--muted); font-size: 16px; margin-bottom: 28px; line-height: 22px; }
     .field {
       display: flex;
       align-items: center;
@@ -88,11 +82,7 @@
     .ok { background: #e8f5e9; color: #2e6b2e; }
     .hidden { display: none !important; }
     .loading { text-align: center; color: var(--muted); padding: 40px 0; }
-    .secondary {
-      margin-top: 20px;
-      font-size: 15px;
-      color: var(--muted);
-    }
+    .secondary { margin-top: 20px; font-size: 15px; color: var(--muted); }
     button.link {
       background: none;
       border: none;
@@ -101,21 +91,19 @@
       text-decoration: underline;
       cursor: pointer;
       padding: 0;
-      margin-top: 8px;
+      margin-top: 16px;
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div id="view-loading" class="loading">Загрузка…</div>
-
-    <div id="view-redirect" class="hidden">
-      <h1>Открываем приложение</h1>
-      <p class="desc">Если «ТвоИИ друзья» не открылось, нажмите кнопку ниже и введите новый пароль здесь, в браузере.</p>
-      <button type="button" class="main" id="btn-open-app">Открыть в приложении ещё раз</button>
-      <button type="button" class="link" id="btn-stay-browser">Продолжить в браузере</button>
+    <div id="view-choose" class="hidden">
+      <h1>Новый пароль</h1>
+      <p class="desc">Задайте новый пароль прямо здесь — он сразу заработает в приложении «ТвоИИ друзья».</p>
+      <button type="button" class="main" id="btn-browser">Задать новый пароль</button>
+      <button type="button" class="link" id="btn-open-app">Открыть приложение</button>
     </div>
-
     <div id="view-form" class="hidden">
       <h1>Новый пароль</h1>
       <p class="desc">Придумайте новый пароль для входа в аккаунт.</p>
@@ -133,31 +121,36 @@
       </form>
       <p class="secondary">После сохранения войдите в приложении с новым паролем.</p>
     </div>
-
+    <div id="view-done" class="hidden">
+      <h1>Пароль изменён</h1>
+      <p class="desc">Теперь можно войти в приложении «ТвоИИ друзья» с новым паролем.</p>
+      <button type="button" class="main" id="btn-open-app-2">Открыть приложение</button>
+    </div>
     <div id="view-bad" class="hidden">
       <h1>Ссылка недействительна</h1>
-      <p class="desc">Запросите новую ссылку для сброса пароля в приложении, раздел «Забыли пароль».</p>
+      <p class="desc" id="bad-text">Ссылка для сброса пароля истекла или уже была использована. Запросите новую в приложении: экран входа → «Забыли пароль?».</p>
     </div>
   </div>
-
   <script type="module">
     const SUPABASE_URL = "https://hrdqnggozfgxmgpihzsb.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_2HFQcx6n516TfJ1LGNnwCg_U3TFn3w-";
     const APP_DEEP_LINK_BASE = "myapp://auth/reset-password";
-
     const $ = (id) => document.getElementById(id);
-    const show = (id) => { ["view-loading","view-redirect","view-form","view-bad"].forEach(v => $(v).classList.add("hidden")); $(id).classList.remove("hidden"); };
-
+    const VIEWS = ["view-loading", "view-choose", "view-form", "view-done", "view-bad"];
+    const show = (id) => {
+      VIEWS.forEach((v) => $(v).classList.add("hidden"));
+      $(id).classList.remove("hidden");
+    };
     function parseHashParams() {
       const h = window.location.hash;
       if (!h || h.length < 2) return null;
       return new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
     }
-
     function isMobileUa() {
-      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || "");
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent || ""
+      );
     }
-
     function tokensFromParams(sp) {
       if (!sp) return null;
       const access_token = sp.get("access_token");
@@ -165,83 +158,87 @@
       if (access_token && refresh_token) return { access_token, refresh_token };
       return null;
     }
-
+    /** Supabase присылает в # ошибку (например otp_expired) — показываем понятный текст. */
+    function errorFromParams(sp) {
+      if (!sp) return null;
+      const code = sp.get("error_code") || "";
+      const desc = sp.get("error_description") || sp.get("error") || "";
+      if (!code && !desc) return null;
+      return { code, desc: decodeURIComponent(desc.replace(/\+/g, " ")) };
+    }
     function buildAppUrl(tokens) {
-      const q = new URLSearchParams({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-      });
-      return `${APP_DEEP_LINK_BASE}?${q.toString()}`;
-    }
-
-    let pendingTokens = null;
-    let supabase = null;
-
-    function tryMobileRedirect(tokens) {
-      if (!isMobileUa()) return false;
-      pendingTokens = tokens;
-      show("view-redirect");
-      window.location.replace(buildAppUrl(tokens));
-      return true;
-    }
-
-    $("btn-open-app")?.addEventListener("click", () => {
-      if (pendingTokens) window.location.href = buildAppUrl(pendingTokens);
-    });
-
-    $("btn-stay-browser")?.addEventListener("click", async () => {
-      show("view-loading");
-      await startBrowserFlow(pendingTokens);
-    });
-
-    async function startBrowserFlow(tokens) {
-      const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
-      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: {
-          detectSessionInUrl: !tokens,
-          persistSession: true,
-          autoRefreshToken: true,
-        },
-      });
-
+      const q = new URLSearchParams();
       if (tokens) {
-        const { error } = await supabase.auth.setSession({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-        });
-        if (error) {
-          show("view-bad");
-          return;
-        }
-      } else {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          show("view-bad");
-          return;
-        }
+        q.set("access_token", tokens.access_token);
+        q.set("refresh_token", tokens.refresh_token);
       }
-
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-      show("view-form");
+      const query = q.toString();
+      return query ? `${APP_DEEP_LINK_BASE}?${query}` : APP_DEEP_LINK_BASE;
     }
-
-    const hashParams = parseHashParams();
-    const fromHash = tokensFromParams(hashParams);
-
-    try {
-      if (fromHash && tryMobileRedirect(fromHash)) {
-        /* redirecting */
-      } else if (fromHash) {
-        await startBrowserFlow(fromHash);
-      } else {
-        await startBrowserFlow(null);
+    function openApp(tokens) {
+      try {
+        window.location.href = buildAppUrl(tokens);
+      } catch {
+        /* если не получилось — остаёмся на странице */
       }
-    } catch {
+    }
+    const hashParams = parseHashParams();
+    const linkTokens = tokensFromParams(hashParams);
+    const linkError = errorFromParams(hashParams);
+    if (linkError) {
+      show("view-bad");
+      if (linkError.code === "otp_expired" || /expired/i.test(linkError.desc)) {
+        $("bad-text").textContent =
+          "Срок действия ссылки истёк. Запросите новую в приложении: экран входа → «Забыли пароль?».";
+      }
+    } else if (linkTokens) {
+      show("view-choose");
+    } else {
       show("view-bad");
     }
-
+    let pendingTokens = linkTokens;
+    let supabase = null;
+    let passwordSaved = false;
+    async function getClient() {
+      if (supabase) return supabase;
+      const { createClient } = await import(
+        "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm"
+      );
+      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          detectSessionInUrl: false,
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      });
+      return supabase;
+    }
+    function localizeError(error) {
+      const m = (error?.message || "").toLowerCase();
+      if (m.includes("auth session missing") || m.includes("session") || m.includes("jwt")) {
+        return "Ссылка устарела. Запросите новую в приложении: экран входа → «Забыли пароль?».";
+      }
+      if (m.includes("different from the old")) {
+        return "Новый пароль должен отличаться от старого.";
+      }
+      if (m.includes("password should be at least") || m.includes("weak")) {
+        return "Пароль слишком простой — используйте минимум 6 символов.";
+      }
+      if (m.includes("invalid api key") || m.includes("apikey")) {
+        return "Сервис временно недоступен. Попробуйте позже или напишите в поддержку.";
+      }
+      return "Не удалось сохранить пароль. Попробуйте ещё раз.";
+    }
+    $("btn-browser")?.addEventListener("click", async () => {
+      show("view-form");
+      // На мобильных адресная строка скрывает часть экрана — подводим форму к верху.
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    $("btn-open-app")?.addEventListener("click", () => openApp(pendingTokens));
+    $("btn-open-app-2")?.addEventListener("click", () => openApp(null));
     $("f")?.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (passwordSaved) return;
       const p1 = $("p1").value.trim();
       const p2 = $("p2").value.trim();
       const msg = $("msg");
@@ -254,16 +251,38 @@
         msg.innerHTML = '<div class="err">Пароли не совпадают.</div>';
         return;
       }
-      const btn = $("submit");
-      btn.disabled = true;
-      const { error } = await supabase.auth.updateUser({ password: p1 });
-      btn.disabled = false;
-      if (error) {
-        msg.innerHTML = `<div class="err">${error.message || "Не удалось сохранить пароль."}</div>`;
+      if (!pendingTokens) {
+        show("view-bad");
         return;
       }
-      msg.innerHTML = '<div class="ok">Пароль изменён. Теперь можно войти в приложении с новым паролем.</div>';
-      $("f").classList.add("hidden");
+      const btn = $("submit");
+      btn.disabled = true;
+      btn.textContent = "Сохраняем…";
+      try {
+        const client = await getClient();
+        const { error: sessionError } = await client.auth.setSession({
+          access_token: pendingTokens.access_token,
+          refresh_token: pendingTokens.refresh_token,
+        });
+        if (sessionError) {
+          msg.innerHTML = `<div class="err">${localizeError(sessionError)}</div>`;
+          return;
+        }
+        const { error } = await client.auth.updateUser({ password: p1 });
+        if (error) {
+          msg.innerHTML = `<div class="err">${localizeError(error)}</div>`;
+          return;
+        }
+        passwordSaved = true;
+        // Убираем токены из адреса, чтобы ссылку нельзя было переиспользовать из истории.
+        window.history.replaceState(null, "", window.location.pathname);
+        show("view-done");
+      } catch {
+        msg.innerHTML = '<div class="err">Не удалось сохранить пароль. Проверьте интернет и попробуйте ещё раз.</div>';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Сохранить пароль";
+      }
     });
   </script>
 </body>
